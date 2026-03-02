@@ -1,10 +1,13 @@
 import os
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except:
+    pass
 from openai import OpenAI
 from qdrant_client import QdrantClient
 import streamlit as st
 import base64
-load_dotenv()
 
 def get_secret(key):
     try:

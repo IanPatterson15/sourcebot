@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 .DS_Store
 migrate_to_qdrant.py
+merged_papers.json
+new_papers.json
+papers.json

@@ -1,15 +1,24 @@
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
-import chromadb
+from qdrant_client import QdrantClient
 import streamlit as st
 import base64
-
 load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-chroma_client = chromadb.PersistentClient(path="./chroma_db")
-collection = chroma_client.get_or_create_collection(name="economics_papers")
+def get_secret(key):
+    try:
+        return st.secrets[key]
+    except:
+        return os.getenv(key)
+
+OPENAI_API_KEY = get_secret("OPENAI_API_KEY")
+QDRANT_URL = get_secret("QDRANT_URL")
+QDRANT_API_KEY = get_secret("QDRANT_API_KEY")
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+qdrant = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+COLLECTION_NAME = "economics_papers"
 
 def get_embedding(text):
     response = client.embeddings.create(
@@ -20,11 +29,20 @@ def get_embedding(text):
 
 def search_papers(query, n_results=5):
     query_embedding = get_embedding(query)
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=n_results
-    )
-    return results
+    hits = qdrant.query_points(
+        collection_name=COLLECTION_NAME,
+        query=query_embedding,
+        limit=n_results,
+        with_payload=True
+    ).points
+    ids = [str(h.id) for h in hits]
+    metadatas = [h.payload for h in hits]
+    documents = [h.payload.get("text", "") for h in hits]
+    return {
+        "ids": [ids],
+        "metadatas": [metadatas],
+        "documents": [documents]
+    }
 
 def analyze_paper(abstract, query):
     response = client.chat.completions.create(
@@ -466,7 +484,7 @@ if st.session_state.page == "home":
         </div>
     </div>
     <div class="footer">
-        <div style="font-size: 0.7rem; color: rgba(255,255,255,0.2); margin-bottom: 0.3rem; letter-spacing: 1px; text-transform: uppercase;">Search from over {collection.count():,} papers</div>
+        <div style="font-size: 0.7rem; color: rgba(255,255,255,0.2); margin-bottom: 0.3rem; letter-spacing: 1px; text-transform: uppercase;">Search from over {qdrant.count(collection_name=COLLECTION_NAME).count:,} papers</div>
         An Ian Patterson Production
     </div>
     """, unsafe_allow_html=True)
@@ -585,7 +603,7 @@ elif st.session_state.page == "search":
                 """, unsafe_allow_html=True)
                 st.code(apa_safe, language=None)
 
-    paper_count = collection.count()
+    paper_count = qdrant.count(collection_name=COLLECTION_NAME).count
     st.markdown(f"""
     <div class="footer-fixed">
         <div style="font-size: 0.7rem; color: rgba(255,255,255,0.2); margin-bottom: 0.3rem; letter-spacing: 1px; text-transform: uppercase;">Search from over {paper_count:,} papers</div>
